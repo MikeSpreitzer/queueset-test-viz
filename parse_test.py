@@ -134,6 +134,7 @@ class ProgressNoter():
 class Request():
     def __init__(self, id: typing.Tuple[int, int, int]):
         self.id = id
+        self.qlane = int(-1)
         return
 
     def set_dispatch(self, real_dispatch_t_str: str, real_dispatch_r_str: str, queue_str: str, width_str: str, virt_dispatch_r_str: str, seat_finder: typing.Callable[[int], typing.List[typing.List[int]]]):
@@ -248,6 +249,9 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
         self.seats = TestParser.init_seats()
         self.num_queues = int(0)
         self.queue_positions = TestParser.init_queue_positions()
+        queue_to_lanes: typing.Mapping[int, SeatAllocator] = dict()
+        self.queue_to_lanes = queue_to_lanes
+        self.queue_lane_sum = int(0)
         self.min_t = Time(datetime.datetime(2050, 1, 1), 0)
         self.max_t = Time(datetime.datetime(2000, 1, 1), 0)
 
@@ -270,6 +274,12 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
 
         self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS(.*) at r=(?P<realEnd>[-0-9 .:]+) v=(?P<realEndR>[0-9.]+)ss: request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} finished all use of (?P<width>[0-9]+) seats, adjusted queue (?P<queue>[0-9]+) start R to (?P<newStartR>[0-9.]+)ss due to service time (?P<duration>[0-9.]+)s, queue will have \d requests, \d seats waiting & \d requests occupying \d seats',
                       consume_finish)
+
+        def consume_end(match: re.Match) -> None:
+            self.eval_t = time_parse(match.group('evalTime'))
+            return
+        self.add_case(
+            r'\s*queueset_test\.go:\d+: (?P<evalTime>[-0-9 .:]+): End', consume_end)
         return
 
     def get_req(self, flow_str: str, thread_str: str, iter_str: str) -> Request:
@@ -282,19 +292,39 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
 
     def parse(self, file) -> None:
         super().parse(file)
-        queue_dict: typing.Mapping[int, int] = dict()
+        queue_to_active: typing.Mapping[int, typing.List[Request]] = dict()
         for (_, req) in self.requests.items():
             req.complete(self.t_of_R)
             self.num_queues = max(self.num_queues, req.queue)
-            queue_dict[req.queue] = 1
+            lanes = self.queue_to_lanes.get(req.queue)
+            if lanes is None:
+                lanes = SeatAllocator()
+                self.queue_to_lanes[req.queue] = lanes
+            active = queue_to_active.get(req.queue)
+            if active is None:
+                queue_to_active[req.queue] = [req]
+            else:
+                newActive: typing.List[Request] = []
+                for oreq in active:
+                    if req.virt_dispatch_r >= oreq.virt_finish_r:
+                        lanes.release_seats([[oreq.qlane, 1]])
+                    else:
+                        newActive.append(oreq)
+                newActive.append(req)
+                queue_to_active[req.queue] = newActive
+            req.qlane = lanes.find_seats(1)[0][0]
             self.min_t = min(self.min_t, min(
                 req.real_dispatch_t, req.virt_dispatch_t))
             self.max_t = max(self.max_t, max(
                 req.real_finish_t, req.virt_finish_t))
-        queue_list = [queue for queue in queue_dict]
+        queue_list = [queue for queue in self.queue_to_lanes]
         queue_list = sorted(queue_list)
         self.queue_positions = {queue: idx for (
             idx, queue) in enumerate(queue_list)}
+        for (qid, lanes) in self.queue_to_lanes.items():
+            qlanes = len(lanes.seats)
+            self.queue_lane_sum += qlanes
+            print(f'Queue {qid} used {qlanes} lanes')
         return
 
     pass
