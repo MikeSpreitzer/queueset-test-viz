@@ -92,6 +92,9 @@ class Request():
         self.progress_noter.add_progress_point(self.real_dispatch_t, self.real_dispatch_r)
         self.queue = int(queue_str)
         self.width = int(width_str)
+        # This is the R of the currently scheduled dispatch in the virtual world,
+        # which may be revised later after the actual duration of earlier requests
+        # is learned.
         self.virt_dispatch_r = float(virt_dispatch_r_str)
         self.seat_runs = seat_finder(self.width)
         # print(f'Request {self.id} assigned seat runs {self.seat_runs}')
@@ -114,6 +117,8 @@ class Request():
 
     def complete(self, t_of_R:typing.Callable[[float], Time]) -> None:
             self.virt_dispatch_t = t_of_R(self.virt_dispatch_r)
+            # And thus these finish times are based on the virtual world
+            # dispatch time that was expected when the real world dispatch happened.
             self.virt_finish_r = self.virt_dispatch_r + self.duration * self.width
             self.virt_finish_t = t_of_R(self.virt_finish_r)
 
@@ -133,18 +138,16 @@ class Request():
                     virt_finish_r=self.virt_finish_r,
                     )
 
-class Seat:
-    pass
-
 class TestParser(parse.Parser, ProgressNoter):
-    @classmethod
-    def init_queues(C) -> typing.Mapping[int, Queue]:
-        return {}
 
     @classmethod
     def init_requests(C) -> typing.Mapping[typing.Tuple[int, int, int], Request]:
         return {}
 
+    @classmethod
+    def init_queue_positions(C) -> typing.Mapping[int, int]:
+        return {}
+    
     @classmethod
     def init_trs(C) -> typing.List[typing.Tuple[Time, float]]:
         return []
@@ -184,15 +187,24 @@ class TestParser(parse.Parser, ProgressNoter):
         return
 
     def __init__(self):
-        self.queues = TestParser.init_queues()
         self.requests = TestParser.init_requests()
         self.trs = TestParser.init_trs()
         self.cases = TestParser.init_cases()
         self.seats = TestParser.init_seats()
-        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS\(.*\) at r=(?P<realStart>[-0-9 .:]+) v=(?P<realStartR>[0-9.]+)ss: dispatching request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} work \{(?P<width>[0-9]+) (?P<pad>[0-9.]+)s\} from queue (?P<queue>[0-9]+) with start R (?P<dispatchR>[0-9.]+)ss, queue will have [0-9]+ waiting & [0-9]+ requests occupying [0-9]+ seats, set will have [0-9]+ seats occupied',
-                      lambda match: self.get_req(match.group('flow'), match.group('thread'), match.group('iter')).set_dispatch(match.group('realStart'), match.group('realStartR'), match.group('queue'), match.group('width'), match.group('dispatchR'), self.find_seats))
+        self.num_queues = int(0)
+        self.queue_positions = TestParser.init_queue_positions()
+        self.min_t = Time(datetime.datetime(2050, 1, 1), 0)
+        self.max_t = Time(datetime.datetime(2000, 1, 1), 0)
+        def consume_dispatch(match:re.Match) -> None:
+            req = self.get_req(match.group('flow'), match.group('thread'), match.group('iter'))
+            req.set_dispatch(match.group('realStart'), match.group('realStartR'), match.group('queue'), match.group('width'), match.group('virtStartR'), self.find_seats)
+        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS\(.*\) at r=(?P<realStart>[-0-9 .:]+) v=(?P<realStartR>[0-9.]+)ss: dispatching request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} work \{(?P<width>[0-9]+) (?P<pad>[0-9.]+)s\} from queue (?P<queue>[0-9]+) with start R (?P<virtStartR>[0-9.]+)ss, queue will have [0-9]+ waiting & [0-9]+ requests occupying [0-9]+ seats, set will have [0-9]+ seats occupied',
+                      consume_dispatch)
+        def consume_finish(match:re.Match) -> None:
+            req = self.get_req(match.group('flow'), match.group('thread'), match.group('iter'))
+            req.set_finish(match.group('realEnd'), match.group('realEndR'), match.group('queue'), match.group('width'), match.group('duration'), self.release_seats)
         self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS(.*) at r=(?P<realEnd>[-0-9 .:]+) v=(?P<realEndR>[0-9.]+)ss: request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} finished all use of (?P<width>[0-9]+) seats, adjusted queue (?P<queue>[0-9]+) start R to (?P<newStartR>[0-9.]+)ss due to service time (?P<duration>[0-9.]+)s, queue will have \d requests, \d seats waiting & \d requests occupying \d seats',
-                      lambda match: self.get_req(match.group('flow'), match.group('thread'), match.group('iter')).set_finish(match.group('realEnd'), match.group('realEndR'), match.group('queue'), match.group('width'), match.group('duration'), self.release_seats))
+                      consume_finish)
         return
 
     def add_progress_point(self, real_time:Time, R:float) -> None:
@@ -212,7 +224,7 @@ class TestParser(parse.Parser, ProgressNoter):
             raise Exception('empty relation')
         xmin, xmax = self.trs[0][ix], self.trs[-1][ix]
         if x < xmin or x > xmax:
-            raise Exception(f'{t} out of range [{xmin},{xmax}]')
+            raise Exception(f'{x} out of range [{xmin},{xmax}]')
         for i in range(len(self.trs)-1):
             if x == self.trs[i][ix]:
                 return self.trs[i][iy]
@@ -220,7 +232,7 @@ class TestParser(parse.Parser, ProgressNoter):
                 xpart = x - self.trs[i][ix]
                 xfull = self.trs[i+1][ix] - self.trs[i][ix]
                 return blendy(self.trs[i][iy], self.trs[i+1][iy], xpart/xfull)
-        return self.trs[-1][1]
+        return self.trs[-1][iy]
 
     def R_of_t(self, t:Time) -> float:
         return self.applytr(t, 0, 1, lambda y0, y1, alpha: y0 + alpha*(y1-y0))
@@ -238,8 +250,16 @@ class TestParser(parse.Parser, ProgressNoter):
 
     def parse(self, file) -> None:
         super().parse(file)
+        queue_dict : typing.Mapping[int, int] = dict()
         for (_,req) in self.requests.items():
             req.complete(self.t_of_R)
+            self.num_queues = max(self.num_queues, req.queue)
+            queue_dict[req.queue] = 1
+            self.min_t = min(self.min_t, min(req.real_dispatch_t, req.virt_dispatch_t))
+            self.max_t = max(self.max_t, max(req.real_finish_t, req.virt_finish_t))
+        queue_list = [queue for queue in queue_dict]
+        queue_list = sorted(queue_list)
+        self.queue_positions = {queue:idx for (idx, queue) in enumerate(queue_list)}
         return
     
     pass
