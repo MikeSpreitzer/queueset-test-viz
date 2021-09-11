@@ -3,6 +3,7 @@ import typing
 
 class Parser():
     def __init__(self):
+        super(Parser, self).__init__()
         self.cases = []
         
     def add_case(self, pat:str, consume:typing.Callable[[re.Match], None]) -> None:

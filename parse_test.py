@@ -88,12 +88,10 @@ class Queue:
 
 
 class ProgressNoter():
-    @classmethod
-    def init_trs(C) -> typing.List[typing.Tuple[Time, float]]:
-        return []
 
     def __init__(self) -> None:
-        self.trs = ProgressNoter.init_trs()
+        super(ProgressNoter, self).__init__()
+        self.trs: typing.List[typing.Tuple[Time, float]] = []
         return
 
     def add_progress_point(self, real_time: Time, R: float) -> None:
@@ -191,12 +189,10 @@ class Request():
 
 
 class SeatAllocator():
-    @classmethod
-    def init_seats(C) -> typing.List[bool]:
-        return []
 
     def __init__(self):
-        self.seats = SeatAllocator.init_seats()
+        super(SeatAllocator, self).__init__()
+        self.seats: typing.List[bool] = []
         return
 
     def find_seats(self, width: int) -> typing.List[typing.List[int]]:
@@ -230,28 +226,16 @@ class SeatAllocator():
 
 class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
 
-    @classmethod
-    def init_requests(C) -> typing.Mapping[typing.Tuple[int, int, int], Request]:
-        return {}
-
-    @classmethod
-    def init_queue_positions(C) -> typing.Mapping[int, int]:
-        return {}
-
-    @classmethod
-    def init_cases(C) -> typing.List[typing.Tuple[re.Pattern, typing.Callable[[re.Match], None]]]:
-        return []
-
     def __init__(self):
-        self.requests = TestParser.init_requests()
-        self.trs = TestParser.init_trs()
-        self.cases = TestParser.init_cases()
-        self.seats = TestParser.init_seats()
-        self.num_queues = int(0)
-        self.queue_positions = TestParser.init_queue_positions()
-        queue_to_lanes: typing.Mapping[int, SeatAllocator] = dict()
-        self.queue_to_lanes = queue_to_lanes
-        self.queue_lane_sum = int(0)
+        super(TestParser, self).__init__()
+        self.requests: typing.Mapping[typing.Tuple[int,
+                                                   int, int], Request] = dict()
+        self.cases: typing.List[typing.Tuple[re.Pattern,
+                                             typing.Callable[[re.Match], None]]] = []
+        self.num_queues: int = 0
+        self.queue_to_lanes: typing.Mapping[int, SeatAllocator] = dict()
+        self.queue_lane_sum: int = 0
+        self.max_flow: int = 0
         self.min_t = Time(datetime.datetime(2050, 1, 1), 0)
         self.max_t = Time(datetime.datetime(2000, 1, 1), 0)
 
@@ -293,8 +277,9 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
     def parse(self, file) -> None:
         super().parse(file)
         queue_to_active: typing.Mapping[int, typing.List[Request]] = dict()
-        for (_, req) in self.requests.items():
+        for (reqid, req) in self.requests.items():
             req.complete(self.t_of_R)
+            self.max_flow = max(self.max_flow, reqid[0])
             self.num_queues = max(self.num_queues, req.queue)
             lanes = self.queue_to_lanes.get(req.queue)
             if lanes is None:
@@ -317,10 +302,6 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
                 req.real_dispatch_t, req.virt_dispatch_t))
             self.max_t = max(self.max_t, max(
                 req.real_finish_t, req.virt_finish_t))
-        queue_list = [queue for queue in self.queue_to_lanes]
-        queue_list = sorted(queue_list)
-        self.queue_positions = {queue: idx for (
-            idx, queue) in enumerate(queue_list)}
         for (qid, lanes) in self.queue_to_lanes.items():
             qlanes = len(lanes.seats)
             self.queue_lane_sum += qlanes
