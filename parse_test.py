@@ -165,27 +165,38 @@ class Request():
         return
 
     def complete(self, t_of_R: typing.Callable[[float], Time]) -> None:
-        self.virt_dispatch_t = t_of_R(self.virt_dispatch_r)
-        # And thus these finish times are based on the virtual world
-        # dispatch time that was expected when the real world dispatch happened.
-        self.virt_finish_r = self.virt_dispatch_r + self.duration * self.width
-        self.virt_finish_t = t_of_R(self.virt_finish_r)
+        try:
+            self.virt_dispatch_t = t_of_R(self.virt_dispatch_r)
+            # And thus these finish times are based on the virtual world
+            # dispatch time that was expected when the real world dispatch happened.
+            self.virt_finish_r = self.virt_dispatch_r + self.duration * self.width
+            self.virt_finish_t = t_of_R(self.virt_finish_r)
+        except Exception as exn:
+            print(f'Exception completing {self.as_dict()}')
+            raise exn
 
     def as_dict(self) -> dict:
-        return dict(id=self.id,
-                    queue=self.queue,
-                    width=self.width,
-                    duration=self.duration,
-                    seat_runs=self.seat_runs,
-                    real_dispatch_t=str(self.real_dispatch_t),
-                    real_finish_t=str(self.real_finish_t),
-                    virt_dispatch_t=str(self.virt_dispatch_t),
-                    virt_finish_t=str(self.virt_finish_t),
-                    real_dispatch_r=self.real_dispatch_r,
-                    real_finish_r=self.real_finish_r,
-                    virt_dispatch_r=self.virt_dispatch_r,
-                    virt_finish_r=self.virt_finish_r,
-                    )
+        ans = dict(id=self.id,
+                   queue=self.queue,
+                   width=self.width,
+                   real_dispatch_t=str(self.real_dispatch_t),
+                   real_dispatch_r=self.real_dispatch_r,
+                   virt_dispatch_r=self.virt_dispatch_r,
+                   seat_runs=self.seat_runs,
+                   )
+        try:
+            ans['real_finish_t'] = str(self.real_finish_t)
+            ans['real_finish_r'] = self.real_finish_r
+            ans['duration'] = self.duration
+        except AttributeError:
+            pass
+        try:
+            ans['virt_dispatch_t'] = str(self.virt_dispatch_t)
+            ans['virt_finish_r'] = self.virt_finish_r
+            ans['virt_finish_t'] = str(self.virt_finish_t)
+        except AttributeError:
+            pass
+        return ans
 
 
 class SeatAllocator():
@@ -256,7 +267,7 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
                 'queue'), match.group('width'), match.group('duration'), self.release_seats)
             self.add_progress_point(req.real_finish_t, req.real_finish_r)
 
-        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS(.*) at r=(?P<realEnd>[-0-9 .:]+) v=(?P<realEndR>[0-9.]+)ss: request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} finished all use of (?P<width>[0-9]+) seats, adjusted queue (?P<queue>[0-9]+) start R to (?P<newStartR>[0-9.]+)ss due to service time (?P<duration>[0-9.]+)s, queue will have \d requests, \d seats waiting & \d requests occupying \d seats',
+        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS(.*) at r=(?P<realEnd>[-0-9 .:]+) v=(?P<realEndR>[0-9.]+)ss: request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} finished all use of (?P<width>[0-9]+) seats, adjusted queue (?P<queue>[0-9]+) start R to (?P<newStartR>[0-9.]+)ss due to service time (?P<duration>[0-9.]+)s, queue will have \d+ requests, \d+ seats waiting & \d+ requests occupying \d+ seats',
                       consume_finish)
 
         def consume_end(match: re.Match) -> None:
