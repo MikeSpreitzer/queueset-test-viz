@@ -18,8 +18,9 @@ def hue_to_rgb(hue: float) -> typing.Tuple[float, float, float]:
 
 def text_in_rectangle(context: cairo.Context, text: str, left: float, top: float, width: float, height: float) -> None:
     extents = context.text_extents(text)
-    context.move_to(left + (width - extents.width)/2 - extents.x_bearing,
-                    top + (height-extents.height)/2 - extents.y_bearing)
+    origin = (left + (width - extents.width)/2 - extents.x_bearing,
+              top + (height-extents.height)/2 - extents.y_bearing)
+    context.move_to(*origin)
     context.show_text(text)
     return
 
@@ -29,7 +30,8 @@ def render_parse(surface: cairo.Surface, parse: parse_test.TestParser, vert_per_
     num_seats = len(parse.seats)
     num_queues = len(parse.queue_to_lanes)
     hor_per_track = float(36)
-    seats_left = hor_per_track*0.5
+    tick_left = float(108)
+    seats_left = tick_left + 9
     seats_right = seats_left + hor_per_track * num_seats
     vert_per_header = float(18)
     seats_orig = (seats_left, 2*vert_per_header)
@@ -70,37 +72,45 @@ def render_parse(surface: cairo.Surface, parse: parse_test.TestParser, vert_per_
     num_flows = 1 + parse.max_flow
     for (reqid, req) in parse.requests.items():
         reqid_str = f'{reqid[0]},{reqid[1]},{reqid[2]}'
+        stop = seats_orig[1] + vert_per_second * \
+            (req.real_dispatch_t-parse.min_t)
+        sheight = vert_per_second*(req.real_finish_t-req.real_dispatch_t)
 
         for (idx, run) in enumerate(req.seat_runs):
             left = seats_orig[0] + run[0]*hor_per_track
-            top = seats_orig[1] + vert_per_second * \
-                (req.real_dispatch_t-parse.min_t)
             width = run[1]*hor_per_track
-            height = vert_per_second*(req.real_finish_t-req.real_dispatch_t)
             context.new_path()
-            context.rectangle(left, top, width, height)
+            context.rectangle(left, stop, width, sheight)
             context.set_source_rgb(*hue_to_rgb(reqid[0]/num_flows))
             context.fill()
 
     context.set_source_rgb(0, 0, 0)
 
+    # Render the rest
+    lastick = None
     for (reqid, req) in parse.requests.items():
         reqid_str = f'{reqid[0]},{reqid[1]},{reqid[2]}'
         context.new_path()
+        stop = seats_orig[1] + vert_per_second * \
+            (req.real_dispatch_t-parse.min_t)
+        sheight = vert_per_second*(req.real_finish_t-req.real_dispatch_t)
+        if lastick is None or stop > lastick + 18:
+            et_str = str(req.real_dispatch_t-parse.min_t)
+            text_in_rectangle(context, et_str, 0, stop, seats_left, 0)
+            lastick = stop
+            context.move_to(tick_left, stop)
+            context.line_to(seats_left, stop)
 
         # Render the seat run outlines
         for (idx, run) in enumerate(req.seat_runs):
             left = seats_orig[0] + run[0]*hor_per_track
-            top = seats_orig[1] + vert_per_second * \
-                (req.real_dispatch_t-parse.min_t)
             width = run[1]*hor_per_track
-            height = vert_per_second*(req.real_finish_t-req.real_dispatch_t)
-            context.rectangle(left, top, width, height)
+            context.rectangle(left, stop, width, sheight)
             if idx == 0:
                 label = reqid_str
             else:
                 label = reqid_str + chr(97+idx)
-            text_in_rectangle(context, label, left, top, width, height)
+            text_in_rectangle(context, label, left, stop, width, sheight)
 
         # Render the queue entry
         qleft = qlefts[req.queue] + hor_per_track * req.qlane
