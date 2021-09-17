@@ -107,12 +107,14 @@ class ProgressNoter():
         self.trs.append(nu)
         return
 
-    def applytr(self, x, ix: int, iy: int, blendy) -> float:
+    def applytr(self, x, ix: int, iy: int, blendy, extrapolate) -> float:
         if len(self.trs) == 0:
             raise Exception('empty relation')
         xmin, xmax = self.trs[0][ix], self.trs[-1][ix]
-        if x < xmin or x > xmax:
+        if x < xmin:
             raise Exception(f'{x} out of range [{xmin},{xmax}]')
+        if x > xmax:
+            return extrapolate(self.trs[-1][iy], x-xmax)
         for i in range(len(self.trs)-1):
             if x == self.trs[i][ix]:
                 return self.trs[i][iy]
@@ -123,10 +125,11 @@ class ProgressNoter():
         return self.trs[-1][iy]
 
     def R_of_t(self, t: Time) -> float:
-        return self.applytr(t, 0, 1, lambda y0, y1, alpha: y0 + alpha*(y1-y0))
+        return self.applytr(t, 0, 1, lambda y0, y1, alpha: y0 + alpha*(y1-y0),
+                            lambda R, dt: R + dt)
 
     def t_of_R(self, R: float) -> Time:
-        return self.applytr(R, 1, 0, time_blend)
+        return self.applytr(R, 1, 0, time_blend, lambda t, dr: time_add_secs(t, dr))
 
 
 class Request():
