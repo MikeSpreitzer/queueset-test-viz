@@ -56,11 +56,14 @@ def render_parse(surface: cairo.Surface, parse: parse_test.TestParser, vert_per_
     text_in_rectangle(context, "Queues", queues_left, 0,
                       queues_right-queues_left, vert_per_header)
 
+    # get ordered list of queues
+    qids = sorted([qid for qid in parse.queue_to_lanes])
+
     # Render the queue headings
     qright = queues_left
     qlefts: typing.Mapping[int, float] = dict()
     htop = vert_per_header
-    for qid in parse.queue_to_lanes:
+    for qid in qids:
         hleft = qright
         qlefts[qid] = qright
         hwidth = hor_per_track * len(parse.queue_to_lanes[qid].seats)
