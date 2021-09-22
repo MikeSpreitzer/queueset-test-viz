@@ -314,12 +314,13 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
             req.qlane = lanes.find_seats(1)[0][0]
             self.min_t = min(self.min_t, min(
                 req.real_dispatch_t, req.virt_dispatch_t))
-            self.max_t = max(self.max_t, max(
-                req.real_finish_t, req.virt_finish_t))
+            self.max_t = max(self.max_t,
+                req.real_finish_t,
+                req.virt_finish_t,
+            )
         for (qid, lanes) in self.queue_to_lanes.items():
             qlanes = len(lanes.seats)
             self.queue_lane_sum += qlanes
-            print(f'Queue {qid} used {qlanes} lanes')
         return
 
     pass
