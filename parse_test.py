@@ -260,7 +260,7 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
                 'queue'), match.group('width'), match.group('virtStartR'), self.find_seats)
             self.add_progress_point(req.real_dispatch_t, req.real_dispatch_r)
 
-        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS\(.*\) at r=(?P<realStart>[-0-9 .:]+) v=(?P<realStartR>[0-9.]+)ss: dispatching request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} work \{(?P<width>[0-9]+) (?P<pad>[0-9.]+)s\} from queue (?P<queue>[0-9]+) with start R (?P<virtStartR>[0-9.]+)ss, queue will have [0-9]+ waiting & [0-9]+ requests occupying [0-9]+ seats, set will have [0-9]+ seats occupied',
+        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS\(.*\) at [tr]=(?P<realStart>[-0-9 .:]+) [vR]=(?P<realStartR>[0-9.]+)ss: dispatching request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} work \{(?P<width>[0-9]+) (?P<pad>[0-9.]+)s\} from queue (?P<queue>[0-9]+) with start R (?P<virtStartR>[0-9.]+)ss, queue will have [0-9]+ waiting & [0-9]+ requests occupying [0-9]+ seats, set will have [0-9]+ seats occupied',
                       consume_dispatch)
 
         def consume_finish(match: re.Match) -> None:
@@ -270,7 +270,7 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
                 'queue'), match.group('width'), match.group('duration'), self.release_seats)
             self.add_progress_point(req.real_finish_t, req.real_finish_r)
 
-        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS(.*) at r=(?P<realEnd>[-0-9 .:]+) v=(?P<realEndR>[0-9.]+)ss: request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} finished all use of (?P<width>[0-9]+) seats, adjusted queue (?P<queue>[0-9]+) start R to (?P<newStartR>[0-9.]+)ss due to service time (?P<duration>[0-9.]+)s, queue will have \d+ requests, \d+ seats waiting & \d+ requests occupying \d+ seats',
+        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS(.*) at [rt]=(?P<realEnd>[-0-9 .:]+) [vR]=(?P<realEndR>[0-9.]+)ss: request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} finished all use of (?P<width>[0-9]+) seats, adjusted queue (?P<queue>[0-9]+) start R to (?P<newStartR>[0-9.]+)ss due to service time (?P<duration>[0-9.]+)s, queue will have \d+ requests, \d+ seats waiting & \d+ requests occupying \d+ seats',
                       consume_finish)
 
         def consume_end(match: re.Match) -> None:
