@@ -138,11 +138,13 @@ class Request():
         self.qlane = int(-1)
         return
 
-    def set_dispatch(self, real_dispatch_t_str: str, real_dispatch_r_str: str, queue_str: str, width_str: str, virt_dispatch_r_str: str, seat_finder: typing.Callable[[int], typing.List[typing.List[int]]]):
+    def set_dispatch(self, real_dispatch_t_str: str, real_dispatch_r_str: str, queue_str: str, width1_str: str, width2_str: str, virt_dispatch_r_str: str, seat_finder: typing.Callable[[int], typing.List[typing.List[int]]]):
         self.real_dispatch_t = time_parse(real_dispatch_t_str)
         self.real_dispatch_r = float(real_dispatch_r_str)
         self.queue = int(queue_str)
-        self.width = int(width_str)
+        width1 = int(width1_str)
+        width2 = int(width2_str) if width2_str else 0
+        self.width = max(width1, width2)
         # This is the R of the currently scheduled dispatch in the virtual world,
         # which may be revised later after the actual duration of earlier requests
         # is learned.
@@ -257,10 +259,10 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
             req = self.get_req(match.group('flow'), match.group(
                 'thread'), match.group('iter'))
             req.set_dispatch(match.group('realStart'), match.group('realStartR'), match.group(
-                'queue'), match.group('width'), match.group('virtStartR'), self.find_seats)
+                'queue'), match.group('width1'), match.group('width2'), match.group('virtStartR'), self.find_seats)
             self.add_progress_point(req.real_dispatch_t, req.real_dispatch_r)
 
-        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS\(.*\) at [tr]=(?P<realStart>[-0-9 .:]+) [vR]=(?P<realStartR>[0-9.]+)ss: dispatching request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} work \{(?P<width>[0-9]+) (?P<pad>[0-9.]+)s\} from queue (?P<queue>[0-9]+) with start R (?P<virtStartR>[0-9.]+)ss, queue will have [0-9]+ waiting & [0-9]+ requests occupying [0-9]+ seats, set will have [0-9]+ seats occupied',
+        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS\(.*\) at [tr]=(?P<realStart>[-0-9 .:]+) [vR]=(?P<realStartR>[0-9.]+)ss: dispatching request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} work \{\{?(?P<width1>[0-9]+)( (?P<width2>[0-9]+))? (?P<pad>[0-9.]+[mun' '\xb5' r']?s)(\} [0-9]+)\} from queue (?P<queue>[0-9]+) with start R (?P<virtStartR>[0-9.]+)ss, queue will have [0-9]+ waiting & [0-9]+ requests occupying [0-9]+ seats, set will have [0-9]+ seats occupied',
                       consume_dispatch)
 
         def consume_finish(match: re.Match) -> None:
@@ -271,6 +273,8 @@ class TestParser(parse.Parser, SeatAllocator, ProgressNoter):
             self.add_progress_point(req.real_finish_t, req.real_finish_r)
 
         self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS(.*) at [rt]=(?P<realEnd>[-0-9 .:]+) [vR]=(?P<realEndR>[0-9.]+)ss: request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} finished all use of (?P<width>[0-9]+) seats, adjusted queue (?P<queue>[0-9]+) start R to (?P<newStartR>[0-9.]+)ss due to service time (?P<duration>[0-9.]+)s, queue will have \d+ requests, \d+ seats waiting & \d+ requests occupying \d+ seats',
+                      consume_finish)
+        self.add_case(r'I[0-9]{4} [0-9.:]+\s+[0-9]+ queueset\.go:[0-9]+\] QS(.*) at [rt]=(?P<realEnd>[-0-9 .:]+) [vR]=(?P<realEndR>[0-9.]+)ss: request "(?P<desc1>.*)" \[\]int\{(?P<flow>[0-9]+), (?P<thread>[0-9]+), (?P<iter>[0-9]+)\} finished all use of (?P<width>[0-9]+) seats, adjusted queue (?P<queue>[0-9]+) start R to (?P<newStartR>[0-9.]+)ss due to service time (?P<duration>[0-9.]+)s, queue sum: queueset.queueSum\{InitialSeatsSum:\d+, MaxSeatsSum:\d+, TotalWorkSum:[0-9a-fA-Fx]+\}, \d+ requests waiting & \d+ requests occupying \d+ seats',
                       consume_finish)
 
         def consume_end(match: re.Match) -> None:
