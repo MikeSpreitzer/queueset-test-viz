@@ -7,8 +7,7 @@ import subprocess
 import typing
 
 
-def hue_to_rgb(hue: float) -> typing.Tuple[float, float, float]:
-    lo = float(0.9)
+def hue_to_rgb(hue: float, lo: float) -> typing.Tuple[float, float, float]:
     hue = max(0, min(1, hue))
     if hue <= 1/3:
         return (1 - (1-lo)*(hue-0)*3, lo + (1-lo)*(hue-0)*3, lo)
@@ -97,15 +96,26 @@ def render_parse(surface: cairo.Surface, parse: parse_test.TestParser,
         reqid_str = f'{reqid[0]},{reqid[1]},{reqid[2]}'
         stop = seats_orig[1] + vert_per_second * \
             (req.real_dispatch_t-parse.min_t)
-        sheight = vert_per_second*(req.real_finish_t-req.real_dispatch_t)
+        smid = seats_orig[1] + vert_per_second * (req.real_mid_t-parse.min_t)
+        sheight1 = vert_per_second*(req.real_mid_t-req.real_dispatch_t)
+        sheight2 = vert_per_second*(req.real_finish_t-req.real_mid_t)
+        rgb1 = hue_to_rgb(reqid[0]/num_flows, 0.80)
+        rgb2 = hue_to_rgb(reqid[0]/num_flows, 0.92)
 
-        for (idx, run) in enumerate(req.seat_runs):
+        context.new_path()
+        for (_, run) in enumerate(req.seat_runs1):
             left = seats_orig[0] + run[0]*hor_per_track
             width = run[1]*hor_per_track
-            context.new_path()
-            context.rectangle(left, stop, width, sheight)
-            context.set_source_rgb(*hue_to_rgb(reqid[0]/num_flows))
-            context.fill()
+            context.rectangle(left, stop, width, sheight1)
+        context.set_source_rgb(*rgb1)
+        context.fill()
+        context.new_path()
+        for (_, run) in enumerate(req.seat_runs):
+            left = seats_orig[0] + run[0]*hor_per_track
+            width = run[1]*hor_per_track
+            context.rectangle(left, smid, width, sheight2)
+        context.set_source_rgb(*rgb2)
+        context.fill()
 
     context.set_source_rgb(0, 0, 0)
 
@@ -163,12 +173,15 @@ def git_credit() -> str:
         ans += ' dirty'
     return ans
 
+
 if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser(
         description='render queueset test log')
-    arg_parser.add_argument('--vert-per-sec', type=float, default=36, help='points per second, default is 36')
+    arg_parser.add_argument('--vert-per-sec', type=float,
+                            default=36, help='points per second, default is 36')
     arg_parser.add_argument('--top-text')
-    arg_parser.add_argument('--bottom-text', help='defaults to github reference to renderer')
+    arg_parser.add_argument(
+        '--bottom-text', help='defaults to github reference to renderer')
     arg_parser.add_argument('infile', type=argparse.FileType('rt'))
     arg_parser.add_argument('outfile', type=argparse.FileType('wb'))
     args = arg_parser.parse_args()
